@@ -1,73 +1,47 @@
-# React + TypeScript + Vite
+# 🚀 FreeFRP 在线配置工具
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> 告别手写代码的痛苦，一键生成你的 frpc.toml 配置文件。
 
-Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
 
-## React Compiler
+## 📖 它是干什么的？
 
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
+**FreeFRP 在线配置工具** 是一个专门为内网穿透爱好者打造的可视化配置面板。
 
-## Expanding the ESLint configuration
+如果你在使用 [FreeFRP](https://freefrp.net/) 服务时，觉得手写 `.toml` 配置文件太麻烦、容易出错，或者记不住复杂的参数格式，这个工具就是为你准备的。它将晦涩的文本编辑转变为**直观的卡片式操作**，让内网穿透映射变得像填表一样简单。
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## ✨ 核心功能
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **可视化隧道管理**：通过卡片形式添加、修改或删除 TCP/UDP 隧道，参数一目了然。
+- **实时代码预览**：内置实时渲染引擎，你每修改一个输入框，顶部的 `frpc.toml` 代码块都会同步更新。
+- **一键快捷操作**：支持配置文件的 **一键导出**、**剪贴板复制** 以及针对特殊场景的 **Base64 编码转换**。
+- **完全适配 FreeFRP**：预设了 `frp.freefrp.net` 服务器信息，无需手动查询服务器地址和端口。
+- **极客风格 UI**：基于 shadcn/ui 打造，支持动态动效、响应式布局（手机也能轻松配置）。
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## 🛠 技术实现
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+本项目采用现代前端技术栈构建，确保极致的响应速度：
+- **框架**: React 18 (Vite)
+- **样式**: Tailwind CSS (含动画效果)
+- **组件**: shadcn/ui (Radix UI)
+- **图标**: Lucide React
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 🚀 快速开始
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+1. **访问工具**：打开部署好的网页。
+2. **添加隧道**：点击“新建隧道配置”按钮。
+3. **填写参数**：
+   - **隧道名称**：给你的映射起个名字（如 `ssh` 或 `web`）。
+   - **本地端口**：你电脑上运行服务的端口（如 `22` 或 `8080`）。
+   - **远程端口**：FreeFRP 提供的公网访问端口（建议范围 10001-50000）。
+4. **获取配置**：点击“复制 TOML”或“导出 TOML”。
+5. **部署运行**：将生成的代码保存为 `frpc.toml`，在终端运行 `./frpc -c frpc.toml` 即可。
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## 🔗 相关资源
+
+- **官方服务站**: [FreeFRP.net](https://freefrp.net/)
+- **FRP 官方仓库**: [fatedier/frp](https://github.com/fatedier/frp)
+- **使用手册**: [FreeFRP 帮助文档](https://freefrp.net/docs)
+
+---
+**Designed with ❤️ for FreeFRP Community**
