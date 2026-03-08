@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-
 import {
   Plus,
   Trash2,
@@ -23,23 +22,54 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+// 1. 定义隧道配置对象接口
+interface TunnelConfig {
+  id: number;
+  name: string;
+  localPort: string;
+  protocol: string;
+  remotePort: string;
+  host: string;
+}
+
 export default function ConfigPage() {
-  const [cards, setCards] = useState<number[]>([]);
+  const [tunnels, setTunnels] = useState<TunnelConfig[]>([]);
 
-  // 添加新卡片
+  // 添加新隧道：增加了随机端口逻辑
   const addCard = () => {
-    setCards([...cards, Date.now()]);
+    // 生成 10001 - 50000 之间的随机整数
+    const randomRemotePort =
+      Math.floor(Math.random() * (50000 - 10001 + 1)) + 10001;
+
+    const newTunnel: TunnelConfig = {
+      id: Date.now(),
+      name: "", // 默认给个名字
+      localPort: "", // 默认本地 80
+      protocol: "tcp",
+      remotePort: randomRemotePort.toString(), // 绑定随机端口
+      host: "127.0.0.1",
+    };
+    setTunnels([...tunnels, newTunnel]);
   };
 
-  // 删除指定卡片
+  // 通用的更新函数
+  const updateTunnel = (
+    id: number,
+    field: keyof TunnelConfig,
+    value: string,
+  ) => {
+    setTunnels((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, [field]: value } : t)),
+    );
+  };
+
   const removeCard = (id: number) => {
-    setCards(cards.filter((cardId) => cardId !== id));
+    setTunnels(tunnels.filter((t) => t.id !== id));
   };
 
-  // 清空所有卡片
   const clearAll = () => {
-    if (cards.length > 0 && confirm("确定要清空所有隧道配置吗？")) {
-      setCards([]);
+    if (tunnels.length > 0 && confirm("确定要清空所有隧道配置吗？")) {
+      setTunnels([]);
     }
   };
 
@@ -72,9 +102,8 @@ export default function ConfigPage() {
         </p>
       </div>
 
-      {/* --- 顶部控制台：配置预览 + 操作按钮 --- */}
+      {/* --- 顶部控制台 --- */}
       <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 bg-slate-50/40 flex flex-col lg:flex-row items-stretch justify-between gap-8 transition-all hover:bg-slate-50/60">
-        {/* 左侧：实时配置预览区 */}
         <div className="flex-1 space-y-3">
           <div className="flex items-center gap-2 mb-1">
             <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -88,7 +117,7 @@ export default function ConfigPage() {
               <div className="flex gap-3">
                 <span className="text-slate-600">01</span>
                 <p className="text-emerald-500/80">
-                  # 当前隧道总数: {cards.length}
+                  # 当前隧道总数: {tunnels.length}
                 </p>
               </div>
               <div className="flex gap-3">
@@ -105,24 +134,24 @@ export default function ConfigPage() {
                 </p>
               </div>
               <div className="flex gap-3">
-                <span className="text-slate-600">03</span>
+                <span className="text-slate-600">04</span>
                 <p className="text-yellow-200/90">
                   <span className="text-slate-500">auth.method =</span> "token"
                 </p>
               </div>
               <div className="flex gap-3">
-                <span className="text-slate-600">04</span>
+                <span className="text-slate-600">05</span>
                 <p className="text-yellow-200/90">
                   <span className="text-slate-500">auth.token =</span>{" "}
                   "freefrp.net"
                 </p>
               </div>
               <div className="flex gap-3">
-                <span className="text-slate-600">05</span>
+                <span className="text-slate-600">06</span>
                 <p className="text-emerald-500/80"># 端口范围：10001 - 50000</p>
               </div>
               <div className="flex gap-3">
-                <span className="text-slate-600">06</span>
+                <span className="text-slate-600">07</span>
                 <p className="text-emerald-500/80">
                   # 启动隧道：frpc -c config.toml
                 </p>
@@ -133,12 +162,11 @@ export default function ConfigPage() {
 
         {/* 右侧：功能按钮区 */}
         <div className="flex flex-wrap md:grid md:grid-cols-2 lg:flex lg:flex-col justify-center gap-3 shrink-0">
-          {/* 分组 1: 数据产出 */}
           <div className="contents lg:space-y-2">
             <Button
               variant="default"
               size="sm"
-              className="h-10 gap-2 shadow-md w-full md:w-auto lg:w-40 justify-start px-4 transition-all active:scale-95"
+              className="h-10 gap-2 shadow-md w-full md:w-auto lg:w-40 justify-start px-4 active:scale-95 transition-all"
             >
               <Download className="w-4 h-4" />
               <span>导出 TOML</span>
@@ -146,14 +174,21 @@ export default function ConfigPage() {
             <Button
               variant="secondary"
               size="sm"
-              className="h-10 gap-2 bg-white border shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 transition-all active:scale-95 hover:bg-slate-50"
+              className="h-10 gap-2 bg-white border shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 active:scale-95 transition-all hover:bg-slate-50"
             >
               <Copy className="w-4 h-4 text-blue-500" />
               <span>复制 TOML</span>
             </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-10 gap-2 bg-white border shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 active:scale-95 transition-all hover:bg-slate-50"
+            >
+              <Copy className="w-4 h-4 text-blue-500" />
+              <span>复制 BASE64</span>
+            </Button>
           </div>
 
-          {/* 分组 2: 管理功能 */}
           <div className="contents lg:space-y-2 lg:pt-3 lg:border-t lg:border-slate-200">
             <Button
               variant="outline"
@@ -179,8 +214,7 @@ export default function ConfigPage() {
       {/* --- 快捷添加按钮 --- */}
       <button
         onClick={addCard}
-        className="w-full border-2 border-dashed border-slate-200 rounded-2xl p-8
-                   hover:border-primary/40 hover:bg-primary/5 transition-all group flex flex-col items-center justify-center gap-3"
+        className="w-full border-2 border-dashed border-slate-200 rounded-2xl p-8 hover:border-primary/40 hover:bg-primary/5 transition-all group flex flex-col items-center justify-center gap-3"
       >
         <div className="p-3 rounded-full bg-slate-100 group-hover:bg-primary group-hover:text-white transition-all duration-300 shadow-sm">
           <Plus className="w-6 h-6" />
@@ -197,13 +231,12 @@ export default function ConfigPage() {
 
       {/* --- 动态卡片列表 --- */}
       <div className="grid grid-cols-1 gap-5">
-        {cards.map((id, index) => (
+        {tunnels.map((tunnel, index) => (
           <Card
-            key={id}
+            key={tunnel.id}
             className="group relative shadow-sm border-slate-200 hover:shadow-xl hover:shadow-primary/5 hover:border-primary/30 transition-all duration-300 animate-in fade-in slide-in-from-top-4"
           >
             <CardContent className="p-5 space-y-5">
-              {/* 卡片头部 */}
               <div className="flex justify-between items-center pb-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <div className="bg-primary/10 p-2 rounded-lg text-primary transition-colors group-hover:bg-primary group-hover:text-white">
@@ -217,30 +250,31 @@ export default function ConfigPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-slate-300 hover:text-destructive hover:bg-red-50 rounded-full transition-colors"
-                  onClick={() => removeCard(id)}
+                  onClick={() => removeCard(tunnel.id)}
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
 
-              {/* 卡片表单区域 */}
               <div className="grid gap-4 text-sm">
-                {/* 隧道名称 */}
                 <div className="flex items-center gap-4">
                   <Label
-                    htmlFor={`name-${id}`}
+                    htmlFor={`name-${tunnel.id}`}
                     className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]"
                   >
                     隧道名称
                   </Label>
                   <Input
-                    id={`name-${id}`}
+                    id={`name-${tunnel.id}`}
                     placeholder="例如: web-service"
+                    value={tunnel.name}
+                    onChange={(e) =>
+                      updateTunnel(tunnel.id, "name", e.target.value)
+                    }
                     className="h-10 bg-slate-50/50 border-transparent focus:bg-white focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
 
-                {/* 本地端口 + 协议 */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="flex items-center gap-4">
                     <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]">
@@ -248,6 +282,10 @@ export default function ConfigPage() {
                     </Label>
                     <Input
                       placeholder="80"
+                      value={tunnel.localPort}
+                      onChange={(e) =>
+                        updateTunnel(tunnel.id, "localPort", e.target.value)
+                      }
                       className="h-10 bg-slate-50/50 border-transparent focus:bg-white"
                     />
                   </div>
@@ -255,7 +293,12 @@ export default function ConfigPage() {
                     <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]">
                       协议
                     </Label>
-                    <Select defaultValue="tcp">
+                    <Select
+                      value={tunnel.protocol}
+                      onValueChange={(val) =>
+                        updateTunnel(tunnel.id, "protocol", val)
+                      }
+                    >
                       <SelectTrigger className="h-10 bg-slate-50/50 border-transparent focus:bg-white">
                         <SelectValue />
                       </SelectTrigger>
@@ -267,7 +310,6 @@ export default function ConfigPage() {
                   </div>
                 </div>
 
-                {/* 远程端口 + 目标主机 */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="flex items-center gap-4">
                     <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]">
@@ -275,6 +317,10 @@ export default function ConfigPage() {
                     </Label>
                     <Input
                       placeholder="20001"
+                      value={tunnel.remotePort}
+                      onChange={(e) =>
+                        updateTunnel(tunnel.id, "remotePort", e.target.value)
+                      }
                       className="h-10 bg-slate-50/50 border-transparent focus:bg-white"
                     />
                   </div>
@@ -283,7 +329,10 @@ export default function ConfigPage() {
                       主机
                     </Label>
                     <Input
-                      defaultValue="127.0.0.1"
+                      value={tunnel.host}
+                      onChange={(e) =>
+                        updateTunnel(tunnel.id, "host", e.target.value)
+                      }
                       className="h-10 bg-slate-50/50 border-transparent focus:bg-white"
                     />
                   </div>
@@ -295,7 +344,7 @@ export default function ConfigPage() {
       </div>
 
       {/* --- 缺省页 --- */}
-      {cards.length === 0 && (
+      {tunnels.length === 0 && (
         <div className="py-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/20">
           <div className="bg-white p-4 rounded-full shadow-sm mb-4">
             <Settings className="w-10 h-10 text-slate-200 animate-spin-slow" />
@@ -307,7 +356,6 @@ export default function ConfigPage() {
         </div>
       )}
 
-      {/* --- 页脚 --- */}
       <footer className="pt-8 text-center text-slate-300 text-[10px] font-bold tracking-[0.2em] uppercase">
         Designed for FreeFRP Community
       </footer>
