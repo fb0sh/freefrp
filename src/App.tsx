@@ -33,17 +33,6 @@ interface TunnelConfig {
   host: string;
 }
 
-// 辅助函数：生成指定长度的随机数字+大小写字母字符串
-const generateRandomId = (length: number) => {
-  const chars =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-};
-
 export default function ConfigPage() {
   const [tunnels, setTunnels] = useState<TunnelConfig[]>([]);
 
@@ -52,9 +41,8 @@ export default function ConfigPage() {
   const generateTOML = () => {
     let toml = `serverAddr = "frp.freefrp.net"\nserverPort = 7000\nauth.method = "token"\nauth.token = "freefrp.net"\n`;
     tunnels.forEach((t) => {
-      const baseName = t.name || `tunnel_${t.id}`;
-      // 添加要求生成的后缀
-      const finalName = `${baseName}_${generateRandomId(5)}`;
+      // 导出规范：[自定义名称]_[本地端口]-[远程端口]
+      const finalName = `${t.name || "service"}_${t.localPort || "0"}-${t.remotePort || "0"}`;
       toml += `\n[[proxies]]\nname = "${finalName}"\ntype = "${t.protocol}"\nlocalIP = "${t.host}"\nlocalPort = ${t.localPort || 80}\nremotePort = ${t.remotePort || 0}\n`;
     });
     return toml;
@@ -86,7 +74,6 @@ export default function ConfigPage() {
 
     try {
       let content = input.trim();
-      // 自动识别 Base64 并解码
       if (!content.includes("[") && !content.includes("serverAddr")) {
         content = decodeURIComponent(escape(atob(content)));
       }
@@ -100,16 +87,13 @@ export default function ConfigPage() {
           return block.match(reg)?.[1] || "";
         };
 
-        // 尝试去除导入名字的随机后缀以保持界面干净
-        let rawName = get("name");
-        const lastUnderscoreIndex = rawName.lastIndexOf("_");
-        if (lastUnderscoreIndex > 0) {
-          rawName = rawName.substring(0, lastUnderscoreIndex);
-        }
+        // 导入还原：截取第一个下划线前的部分作为可编辑名称
+        let fullName = get("name");
+        let displayName = fullName.split("_")[0] || "";
 
         return {
           id: Date.now() + i,
-          name: rawName,
+          name: displayName,
           localPort: get("localPort"),
           protocol: get("type") || "tcp",
           remotePort: get("remotePort"),
@@ -251,8 +235,7 @@ export default function ConfigPage() {
               <div className="flex gap-3">
                 <span className="text-slate-600">08</span>
                 <p className="text-emerald-500/80">
-                  # 注：配置文件中
-                  隧道的名称会随机追加_xxx，为避免与他人服务名重复
+                  # 注：配置文件中 隧道的名称会根据端口自动生成，避免重复
                 </p>
               </div>
             </div>
@@ -270,15 +253,17 @@ export default function ConfigPage() {
             </Button>
             <Button
               variant="secondary"
+              size="sm"
               onClick={() => handleCopy("toml")}
-              className="h-10 gap-2 bg-white border shadow-sm w-full lg:w-40 justify-start px-4 active:scale-95 hover:bg-slate-50 transition-all"
+              className="h-10 gap-2 bg-white border shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 active:scale-95 transition-all hover:bg-slate-50"
             >
               <Copy className="w-4 h-4 text-blue-500" /> 复制 TOML
             </Button>
             <Button
               variant="secondary"
+              size="sm"
               onClick={() => handleCopy("base64")}
-              className="h-10 gap-2 bg-white border shadow-sm w-full lg:w-40 justify-start px-4 active:scale-95 hover:bg-slate-50 transition-all"
+              className="h-10 gap-2 bg-white border shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 active:scale-95 hover:bg-slate-50 transition-all"
             >
               <Copy className="w-4 h-4 text-blue-500" /> 复制 BASE64
             </Button>
@@ -351,14 +336,19 @@ export default function ConfigPage() {
                   <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
                     隧道名称
                   </Label>
-                  <Input
-                    value={tunnel.name}
-                    onChange={(e) =>
-                      updateTunnel(tunnel.id, "name", e.target.value)
-                    }
-                    placeholder="service"
-                    className="h-10 bg-slate-50/50 border-transparent focus:bg-white focus:ring-1 focus:ring-primary transition-all"
-                  />
+                  <div className="flex flex-1 items-center">
+                    <Input
+                      value={tunnel.name}
+                      onChange={(e) =>
+                        updateTunnel(tunnel.id, "name", e.target.value)
+                      }
+                      placeholder="自定义名"
+                      className="h-10 rounded-r-none border-r-0 focus-visible:ring-0 focus:bg-white transition-all"
+                    />
+                    <div className="h-10 px-3 flex items-center bg-slate-100 border border-l-0 border-slate-200 rounded-r-md text-slate-400 font-mono text-[11px] whitespace-nowrap select-none">
+                      _{tunnel.localPort || "0"}-{tunnel.remotePort || "0"}
+                    </div>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="flex items-center gap-4">
@@ -370,7 +360,7 @@ export default function ConfigPage() {
                       onChange={(e) =>
                         updateTunnel(tunnel.id, "localPort", e.target.value)
                       }
-                      placeholder="22"
+                      placeholder="80"
                       className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
                     />
                   </div>
@@ -404,6 +394,7 @@ export default function ConfigPage() {
                       onChange={(e) =>
                         updateTunnel(tunnel.id, "remotePort", e.target.value)
                       }
+                      placeholder="20001"
                       className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
                     />
                   </div>
