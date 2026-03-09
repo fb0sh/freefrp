@@ -45,7 +45,12 @@ export default function ConfigPage() {
     let toml = `serverAddr = "frp.freefrp.net"\nserverPort = 7000\nauth.method = "token"\nauth.token = "freefrp.net"\n`;
     tunnels.forEach((t) => {
       const isWeb = t.protocol === "http" || t.protocol === "https";
-      const suffix = `_${t.localPort || "0"}-${isWeb ? t.protocol : t.remotePort || "0"}`;
+
+      // 逻辑：TCP/UDP -> _本地-远程/协议 | HTTP/HTTPS -> _本地/协议
+      const suffix = isWeb
+        ? `_${t.localPort || "0"}/${t.protocol}`
+        : `_${t.localPort || "0"}-${t.remotePort || "0"}/${t.protocol}`;
+
       const finalName = `${t.name || "service"}${suffix}`;
 
       toml += `\n[[proxies]]\nname = "${finalName}"\ntype = "${t.protocol}"\nlocalIP = "${t.host}"\nlocalPort = ${t.localPort || 80}\n`;
@@ -255,7 +260,6 @@ export default function ConfigPage() {
           </div>
         </div>
 
-        {/* 按钮区域 - 已完整还原 */}
         <div className="flex flex-wrap md:grid md:grid-cols-2 lg:flex lg:flex-col justify-center gap-3 shrink-0">
           <div className="contents lg:space-y-2">
             <Button
@@ -300,7 +304,6 @@ export default function ConfigPage() {
         </div>
       </div>
 
-      {/* 添加卡片按钮 - 已完整还原 */}
       <button
         onClick={addCard}
         className="w-full border-2 border-dashed border-slate-200 rounded-2xl p-8 hover:border-primary/40 hover:bg-primary/5 transition-all group flex flex-col items-center justify-center gap-3"
@@ -318,7 +321,6 @@ export default function ConfigPage() {
         </div>
       </button>
 
-      {/* 隧道列表 */}
       <div className="grid grid-cols-1 gap-5">
         {tunnels.map((tunnel, index) => {
           const isWeb =
@@ -365,9 +367,11 @@ export default function ConfigPage() {
                         placeholder="service"
                         className="h-10 rounded-r-none border-r-0 focus-visible:ring-0 focus:bg-white transition-all"
                       />
+                      {/* 动态后缀：_本地-远程/协议 或 _本地/协议 */}
                       <div className="h-10 px-3 flex items-center bg-slate-100 border border-l-0 border-slate-200 rounded-r-md text-slate-400 font-mono text-[11px] whitespace-nowrap select-none">
-                        _{tunnel.localPort || "0"}-
-                        {isWeb ? tunnel.protocol : tunnel.remotePort || "0"}
+                        _{tunnel.localPort || "0"}
+                        {isWeb ? "" : `-${tunnel.remotePort || "0"}`}/
+                        {tunnel.protocol}
                       </div>
                     </div>
                   </div>
@@ -408,7 +412,6 @@ export default function ConfigPage() {
                     </div>
                   </div>
 
-                  {/* 条件展示字段 */}
                   {isWeb ? (
                     <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
