@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "baseUrl": "./",
+    "baseUrl": "/freefrp/",
     "paths": {
       "@/*": ["./src/*"],
     },
