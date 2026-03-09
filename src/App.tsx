@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import { saveAs } from "file-saver"; // pnpm add file-saver
+import { toast } from "sonner"; // shadcn 的 sonner
 import {
   Plus,
   Trash2,
@@ -22,7 +24,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// 1. 定义隧道配置对象接口
 interface TunnelConfig {
   id: number;
   name: string;
@@ -32,27 +33,115 @@ interface TunnelConfig {
   host: string;
 }
 
+// 辅助函数：生成指定长度的随机数字+大小写字母字符串
+const generateRandomId = (length: number) => {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
 export default function ConfigPage() {
   const [tunnels, setTunnels] = useState<TunnelConfig[]>([]);
 
-  // 添加新隧道：增加了随机端口逻辑
-  const addCard = () => {
-    // 生成 10001 - 50000 之间的随机整数
-    const randomRemotePort =
-      Math.floor(Math.random() * (50000 - 10001 + 1)) + 10001;
+  // --- 核心业务逻辑 ---
 
+  const generateTOML = () => {
+    let toml = `serverAddr = "frp.freefrp.net"\nserverPort = 7000\nauth.method = "token"\nauth.token = "freefrp.net"\n`;
+    tunnels.forEach((t) => {
+      const baseName = t.name || `tunnel_${t.id}`;
+      // 添加要求生成的后缀
+      const finalName = `${baseName}_${generateRandomId(5)}`;
+      toml += `\n[[proxies]]\nname = "${finalName}"\ntype = "${t.protocol}"\nlocalIP = "${t.host}"\nlocalPort = ${t.localPort || 80}\nremotePort = ${t.remotePort || 0}\n`;
+    });
+    return toml;
+  };
+
+  const handleExport = () => {
+    if (tunnels.length === 0) return toast.error("配置列表为空");
+    const blob = new Blob([generateTOML()], {
+      type: "text/plain;charset=utf-8",
+    });
+    saveAs(blob, "frpc.toml");
+    toast.success("frpc.toml 已开始下载");
+  };
+
+  const handleCopy = (type: "toml" | "base64") => {
+    if (tunnels.length === 0) return toast.error("配置列表为空");
+    const content = generateTOML();
+    const result =
+      type === "base64" ? btoa(unescape(encodeURIComponent(content))) : content;
+
+    navigator.clipboard.writeText(result).then(() => {
+      toast.success(`${type.toUpperCase()} 内容已复制`);
+    });
+  };
+
+  const handleImport = () => {
+    const input = prompt("请粘贴 TOML 内容或 Base64 字符串：");
+    if (!input) return;
+
+    try {
+      let content = input.trim();
+      // 自动识别 Base64 并解码
+      if (!content.includes("[") && !content.includes("serverAddr")) {
+        content = decodeURIComponent(escape(atob(content)));
+      }
+
+      const proxyBlocks = content.split("[[proxies]]").slice(1);
+      if (proxyBlocks.length === 0) throw new Error();
+
+      const imported = proxyBlocks.map((block, i) => {
+        const get = (key: string) => {
+          const reg = new RegExp(`${key}\\s*=\\s*"?([^"\\n]+)"?`);
+          return block.match(reg)?.[1] || "";
+        };
+
+        // 尝试去除导入名字的随机后缀以保持界面干净
+        let rawName = get("name");
+        const lastUnderscoreIndex = rawName.lastIndexOf("_");
+        if (lastUnderscoreIndex > 0) {
+          rawName = rawName.substring(0, lastUnderscoreIndex);
+        }
+
+        return {
+          id: Date.now() + i,
+          name: rawName,
+          localPort: get("localPort"),
+          protocol: get("type") || "tcp",
+          remotePort: get("remotePort"),
+          host: get("localIP") || "127.0.0.1",
+        };
+      });
+
+      setTunnels((prev) => [...prev, ...imported]);
+      toast.success(`成功导入 ${imported.length} 个配置项`);
+    } catch {
+      toast.error("解析失败，请检查配置格式");
+    }
+  };
+
+  // --- UI 交互逻辑 ---
+
+  const addCard = () => {
+    const randomPort = Math.floor(Math.random() * (50000 - 10001 + 1)) + 10001;
     const newTunnel: TunnelConfig = {
       id: Date.now(),
-      name: "", // 默认给个名字
-      localPort: "", // 默认本地 80
+      name: ``,
+      localPort: "",
       protocol: "tcp",
-      remotePort: randomRemotePort.toString(), // 绑定随机端口
+      remotePort: randomPort.toString(),
       host: "127.0.0.1",
     };
     setTunnels([...tunnels, newTunnel]);
+    toast.success("已添加隧道", {
+      description: `随机分配远程端口: ${randomPort}`,
+    });
   };
 
-  // 通用的更新函数
   const updateTunnel = (
     id: number,
     field: keyof TunnelConfig,
@@ -65,44 +154,47 @@ export default function ConfigPage() {
 
   const removeCard = (id: number) => {
     setTunnels(tunnels.filter((t) => t.id !== id));
+    toast.info("配置已移除");
   };
-
   const clearAll = () => {
     if (tunnels.length > 0 && confirm("确定要清空所有隧道配置吗？")) {
       setTunnels([]);
+      toast.success("所有配置已清空");
     }
   };
-
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8 animate-in fade-in duration-700">
-      {/* --- 标题部分 --- */}
+      {/* 标题部分 */}
       <div className="flex flex-col gap-1 border-l-4 border-primary pl-4 py-1">
         <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center gap-2">
-          FREE FRP <span className="text-primary/60 font-light">在线配置</span>
+          FREE FRP{" "}
+          <span className="text-primary/60 font-light">在线配置工具</span>
           <Zap className="w-5 h-5 fill-primary text-primary animate-pulse" />
         </h1>
-        <p className="text-sm text-slate-500 font-medium">
-          服务支持网站：
-          <a
-            href="https://freefrp.net/"
-            className="hover:underline"
-            target="_blank"
-          >
-            https://freefrp.net/
-          </a>
-          <br />
-          工具下载网站：
-          <a
-            href="https://github.com/fatedier/frp/releases"
-            className="hover:underline"
-            target="_blank"
-          >
-            https://github.com/fatedier/frp/releases
-          </a>
-        </p>
+        <div className="text-sm text-slate-500 font-medium">
+          <p className="text-sm text-slate-500 font-medium">
+            服务支持网站：
+            <a
+              href="https://freefrp.net/"
+              className="hover:underline"
+              target="_blank"
+            >
+              https://freefrp.net/
+            </a>
+            <br />
+            工具下载网站：
+            <a
+              href="https://github.com/fatedier/frp/releases"
+              className="hover:underline"
+              target="_blank"
+            >
+              https://github.com/fatedier/frp/releases
+            </a>
+          </p>
+        </div>
       </div>
 
-      {/* --- 顶部控制台 --- */}
+      {/* 顶部控制台 */}
       <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 bg-slate-50/40 flex flex-col lg:flex-row items-stretch justify-between gap-8 transition-all hover:bg-slate-50/60">
         <div className="flex-1 space-y-3">
           <div className="flex items-center gap-2 mb-1">
@@ -112,8 +204,8 @@ export default function ConfigPage() {
             </span>
           </div>
           <div className="bg-slate-950 rounded-xl p-5 font-mono text-[13px] leading-relaxed shadow-2xl border border-white/5 relative overflow-hidden group">
-            <Terminal className="absolute -bottom-2 -right-2 w-16 h-16 text-white/5 rotate-12 group-hover:text-white/10 transition-colors" />
-            <div className="relative z-10 space-y-1.5">
+            <Terminal className="absolute -bottom-2 -right-2 w-16 h-16 text-white/5 rotate-12" />
+            <div className="relative z-10 space-y-1.5 text-yellow-200/90">
               <div className="flex gap-3">
                 <span className="text-slate-600">01</span>
                 <p className="text-emerald-500/80">
@@ -122,26 +214,26 @@ export default function ConfigPage() {
               </div>
               <div className="flex gap-3">
                 <span className="text-slate-600">02</span>
-                <p className="text-yellow-200/90">
+                <p>
                   <span className="text-slate-500">serverAddr =</span>{" "}
                   "frp.freefrp.net"
                 </p>
               </div>
               <div className="flex gap-3">
                 <span className="text-slate-600">03</span>
-                <p className="text-yellow-200/90">
+                <p>
                   <span className="text-slate-500">serverPort =</span> 7000
                 </p>
               </div>
               <div className="flex gap-3">
                 <span className="text-slate-600">04</span>
-                <p className="text-yellow-200/90">
+                <p>
                   <span className="text-slate-500">auth.method =</span> "token"
                 </p>
               </div>
               <div className="flex gap-3">
                 <span className="text-slate-600">05</span>
-                <p className="text-yellow-200/90">
+                <p>
                   <span className="text-slate-500">auth.token =</span>{" "}
                   "freefrp.net"
                 </p>
@@ -156,67 +248,66 @@ export default function ConfigPage() {
                   # 启动隧道：frpc -c config.toml
                 </p>
               </div>
+              <div className="flex gap-3">
+                <span className="text-slate-600">08</span>
+                <p className="text-emerald-500/80">
+                  # 注：配置文件中
+                  隧道的名称会随机追加_xxx，为避免与他人服务名重复
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* 右侧：功能按钮区 */}
+        {/* 按钮区域 */}
         <div className="flex flex-wrap md:grid md:grid-cols-2 lg:flex lg:flex-col justify-center gap-3 shrink-0">
           <div className="contents lg:space-y-2">
             <Button
-              variant="default"
-              size="sm"
-              className="h-10 gap-2 shadow-md w-full md:w-auto lg:w-40 justify-start px-4 active:scale-95 transition-all"
+              onClick={handleExport}
+              className="h-10 gap-2 shadow-md w-full lg:w-40 justify-start px-4 active:scale-95 transition-all"
             >
-              <Download className="w-4 h-4" />
-              <span>导出 TOML</span>
+              <Download className="w-4 h-4" /> 导出 TOML
             </Button>
             <Button
               variant="secondary"
-              size="sm"
-              className="h-10 gap-2 bg-white border shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 active:scale-95 transition-all hover:bg-slate-50"
+              onClick={() => handleCopy("toml")}
+              className="h-10 gap-2 bg-white border shadow-sm w-full lg:w-40 justify-start px-4 active:scale-95 hover:bg-slate-50 transition-all"
             >
-              <Copy className="w-4 h-4 text-blue-500" />
-              <span>复制 TOML</span>
+              <Copy className="w-4 h-4 text-blue-500" /> 复制 TOML
             </Button>
             <Button
               variant="secondary"
-              size="sm"
-              className="h-10 gap-2 bg-white border shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 active:scale-95 transition-all hover:bg-slate-50"
+              onClick={() => handleCopy("base64")}
+              className="h-10 gap-2 bg-white border shadow-sm w-full lg:w-40 justify-start px-4 active:scale-95 hover:bg-slate-50 transition-all"
             >
-              <Copy className="w-4 h-4 text-blue-500" />
-              <span>复制 BASE64</span>
+              <Copy className="w-4 h-4 text-blue-500" /> 复制 BASE64
             </Button>
           </div>
-
           <div className="contents lg:space-y-2 lg:pt-3 lg:border-t lg:border-slate-200">
             <Button
               variant="outline"
-              size="sm"
-              className="h-10 gap-2 bg-white shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 hover:border-emerald-200 hover:bg-emerald-50 transition-colors"
+              onClick={handleImport}
+              className="h-10 gap-2 bg-white shadow-sm w-full lg:w-40 justify-start px-4 hover:border-emerald-200 hover:bg-emerald-50 transition-all"
             >
-              <Upload className="w-4 h-4 text-emerald-500" />
-              <span>导入TOML</span>
+              <Upload className="w-4 h-4 text-emerald-500" /> 导入 TOML
             </Button>
             <Button
               variant="outline"
-              size="sm"
               onClick={clearAll}
-              className="h-10 gap-2 bg-white shadow-sm w-full md:w-auto lg:w-40 justify-start px-4 text-destructive hover:bg-red-50 hover:text-red-600 border-red-100 transition-colors"
+              className="h-10 gap-2 bg-white shadow-sm w-full lg:w-40 justify-start px-4 text-destructive hover:bg-red-50 border-red-100 transition-all"
             >
-              <Trash2 className="w-4 h-4" />
-              <span>清空全部</span>
+              <Trash2 className="w-4 h-4" /> 清空全部
             </Button>
           </div>
         </div>
       </div>
 
-      {/* --- 快捷添加按钮 --- */}
+      {/* 添加卡片按钮 */}
       <button
         onClick={addCard}
         className="w-full border-2 border-dashed border-slate-200 rounded-2xl p-8 hover:border-primary/40 hover:bg-primary/5 transition-all group flex flex-col items-center justify-center gap-3"
       >
-        <div className="p-3 rounded-full bg-slate-100 group-hover:bg-primary group-hover:text-white transition-all duration-300 shadow-sm">
+        <div className="p-3 rounded-full bg-slate-100 group-hover:bg-primary group-hover:text-white transition-all shadow-sm">
           <Plus className="w-6 h-6" />
         </div>
         <div className="text-center">
@@ -224,17 +315,17 @@ export default function ConfigPage() {
             新建隧道配置
           </p>
           <p className="text-xs text-slate-400 mt-1">
-            点击按钮添加 TCP / UDP 隧道
+            随机分配端口 (10001-50000)
           </p>
         </div>
       </button>
 
-      {/* --- 动态卡片列表 --- */}
+      {/* 隧道列表 */}
       <div className="grid grid-cols-1 gap-5">
         {tunnels.map((tunnel, index) => (
           <Card
             key={tunnel.id}
-            className="group relative shadow-sm border-slate-200 hover:shadow-xl hover:shadow-primary/5 hover:border-primary/30 transition-all duration-300 animate-in fade-in slide-in-from-top-4"
+            className="group relative shadow-sm border-slate-200 hover:shadow-xl hover:border-primary/30 transition-all duration-300 animate-in fade-in slide-in-from-top-4"
           >
             <CardContent className="p-5 space-y-5">
               <div className="flex justify-between items-center pb-3 border-b border-slate-100">
@@ -243,60 +334,54 @@ export default function ConfigPage() {
                     <Code2 className="w-4 h-4" />
                   </div>
                   <h3 className="text-sm font-bold text-slate-700">
-                    隧道映射配置 #{index + 1}
+                    隧道配置 #{index + 1}
                   </h3>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-slate-300 hover:text-destructive hover:bg-red-50 rounded-full transition-colors"
+                  className="h-8 w-8 text-slate-300 hover:text-destructive hover:bg-red-50 rounded-full"
                   onClick={() => removeCard(tunnel.id)}
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
-
               <div className="grid gap-4 text-sm">
                 <div className="flex items-center gap-4">
-                  <Label
-                    htmlFor={`name-${tunnel.id}`}
-                    className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]"
-                  >
+                  <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
                     隧道名称
                   </Label>
                   <Input
-                    id={`name-${tunnel.id}`}
-                    placeholder="例如: web-service"
                     value={tunnel.name}
                     onChange={(e) =>
                       updateTunnel(tunnel.id, "name", e.target.value)
                     }
+                    placeholder="service"
                     className="h-10 bg-slate-50/50 border-transparent focus:bg-white focus:ring-1 focus:ring-primary transition-all"
                   />
                 </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="flex items-center gap-4">
-                    <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]">
+                    <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
                       本地端口
                     </Label>
                     <Input
-                      placeholder="80"
                       value={tunnel.localPort}
                       onChange={(e) =>
                         updateTunnel(tunnel.id, "localPort", e.target.value)
                       }
-                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white"
+                      placeholder="22"
+                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
                     />
                   </div>
                   <div className="flex items-center gap-4">
-                    <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]">
+                    <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
                       协议
                     </Label>
                     <Select
                       value={tunnel.protocol}
-                      onValueChange={(val) =>
-                        updateTunnel(tunnel.id, "protocol", val)
+                      onValueChange={(v) =>
+                        updateTunnel(tunnel.id, "protocol", v)
                       }
                     >
                       <SelectTrigger className="h-10 bg-slate-50/50 border-transparent focus:bg-white">
@@ -309,23 +394,21 @@ export default function ConfigPage() {
                     </Select>
                   </div>
                 </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="flex items-center gap-4">
-                    <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]">
+                    <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
                       远程端口
                     </Label>
                     <Input
-                      placeholder="20001"
                       value={tunnel.remotePort}
                       onChange={(e) =>
                         updateTunnel(tunnel.id, "remotePort", e.target.value)
                       }
-                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white"
+                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
                     />
                   </div>
                   <div className="flex items-center gap-4">
-                    <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase tracking-tighter text-[11px]">
+                    <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
                       主机
                     </Label>
                     <Input
@@ -333,7 +416,7 @@ export default function ConfigPage() {
                       onChange={(e) =>
                         updateTunnel(tunnel.id, "host", e.target.value)
                       }
-                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white"
+                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
                     />
                   </div>
                 </div>
@@ -343,22 +426,12 @@ export default function ConfigPage() {
         ))}
       </div>
 
-      {/* --- 缺省页 --- */}
       {tunnels.length === 0 && (
         <div className="py-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-100 rounded-3xl bg-slate-50/20">
-          <div className="bg-white p-4 rounded-full shadow-sm mb-4">
-            <Settings className="w-10 h-10 text-slate-200 animate-spin-slow" />
-          </div>
-          <h3 className="text-slate-900 font-bold">暂无活跃隧道</h3>
-          <p className="text-slate-400 text-sm mt-1">
-            请通过上方的加号按钮开始你的配置
-          </p>
+          <Settings className="w-10 h-10 text-slate-200 animate-spin-slow mb-4" />
+          <p className="text-slate-400 text-sm">暂无活跃隧道</p>
         </div>
       )}
-
-      <footer className="pt-8 text-center text-slate-300 text-[10px] font-bold tracking-[0.2em] uppercase">
-        Designed for FreeFRP Community
-      </footer>
     </div>
   );
 }
