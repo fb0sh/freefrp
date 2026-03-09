@@ -11,6 +11,7 @@ import {
   Upload,
   Zap,
   Settings,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,8 @@ interface TunnelConfig {
   protocol: string;
   remotePort: string;
   host: string;
+  customDomains?: string;
+  subdomain?: string;
 }
 
 export default function ConfigPage() {
@@ -41,9 +44,18 @@ export default function ConfigPage() {
   const generateTOML = () => {
     let toml = `serverAddr = "frp.freefrp.net"\nserverPort = 7000\nauth.method = "token"\nauth.token = "freefrp.net"\n`;
     tunnels.forEach((t) => {
-      // 导出规范：[自定义名称]_[本地端口]-[远程端口]
-      const finalName = `${t.name || "service"}_${t.localPort || "0"}-${t.remotePort || "0"}`;
-      toml += `\n[[proxies]]\nname = "${finalName}"\ntype = "${t.protocol}"\nlocalIP = "${t.host}"\nlocalPort = ${t.localPort || 80}\nremotePort = ${t.remotePort || 0}\n`;
+      const isWeb = t.protocol === "http" || t.protocol === "https";
+      const suffix = `_${t.localPort || "0"}-${isWeb ? t.protocol : t.remotePort || "0"}`;
+      const finalName = `${t.name || "service"}${suffix}`;
+
+      toml += `\n[[proxies]]\nname = "${finalName}"\ntype = "${t.protocol}"\nlocalIP = "${t.host}"\nlocalPort = ${t.localPort || 80}\n`;
+
+      if (isWeb) {
+        if (t.customDomains) toml += `customDomains = ["${t.customDomains}"]\n`;
+        if (t.subdomain) toml += `subdomain = "${t.subdomain}"\n`;
+      } else {
+        toml += `remotePort = ${t.remotePort || 0}\n`;
+      }
     });
     return toml;
   };
@@ -83,21 +95,22 @@ export default function ConfigPage() {
 
       const imported = proxyBlocks.map((block, i) => {
         const get = (key: string) => {
-          const reg = new RegExp(`${key}\\s*=\\s*"?([^"\\n]+)"?`);
+          const reg = new RegExp(
+            `${key}\\s*=\\s*(?:\\["|")([^"\\]\\n]+)(?:"\\]|")`,
+          );
           return block.match(reg)?.[1] || "";
         };
 
-        // 导入还原：截取第一个下划线前的部分作为可编辑名称
-        let fullName = get("name");
-        let displayName = fullName.split("_")[0] || "";
-
+        const fullName = get("name");
         return {
           id: Date.now() + i,
-          name: displayName,
+          name: fullName.split("_")[0] || "",
           localPort: get("localPort"),
           protocol: get("type") || "tcp",
           remotePort: get("remotePort"),
           host: get("localIP") || "127.0.0.1",
+          customDomains: get("customDomains"),
+          subdomain: get("subdomain"),
         };
       });
 
@@ -148,7 +161,7 @@ export default function ConfigPage() {
   };
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8 animate-in fade-in duration-700">
-      {/* 标题部分 */}
+      {/* 标题部分 - 已完整还原 */}
       <div className="flex flex-col gap-1 border-l-4 border-primary pl-4 py-1">
         <h1 className="text-3xl font-black tracking-tight text-slate-900 flex items-center gap-2">
           FREE FRP{" "}
@@ -178,7 +191,7 @@ export default function ConfigPage() {
         </div>
       </div>
 
-      {/* 顶部控制台 */}
+      {/* 顶部控制台 - 已完整还原 */}
       <div className="border-2 border-dashed border-slate-200 rounded-2xl p-6 bg-slate-50/40 flex flex-col lg:flex-row items-stretch justify-between gap-8 transition-all hover:bg-slate-50/60">
         <div className="flex-1 space-y-3">
           <div className="flex items-center gap-2 mb-1">
@@ -242,7 +255,7 @@ export default function ConfigPage() {
           </div>
         </div>
 
-        {/* 按钮区域 */}
+        {/* 按钮区域 - 已完整还原 */}
         <div className="flex flex-wrap md:grid md:grid-cols-2 lg:flex lg:flex-col justify-center gap-3 shrink-0">
           <div className="contents lg:space-y-2">
             <Button
@@ -287,7 +300,7 @@ export default function ConfigPage() {
         </div>
       </div>
 
-      {/* 添加卡片按钮 */}
+      {/* 添加卡片按钮 - 已完整还原 */}
       <button
         onClick={addCard}
         className="w-full border-2 border-dashed border-slate-200 rounded-2xl p-8 hover:border-primary/40 hover:bg-primary/5 transition-all group flex flex-col items-center justify-center gap-3"
@@ -307,114 +320,184 @@ export default function ConfigPage() {
 
       {/* 隧道列表 */}
       <div className="grid grid-cols-1 gap-5">
-        {tunnels.map((tunnel, index) => (
-          <Card
-            key={tunnel.id}
-            className="group relative shadow-sm border-slate-200 hover:shadow-xl hover:border-primary/30 transition-all duration-300 animate-in fade-in slide-in-from-top-4"
-          >
-            <CardContent className="p-5 space-y-5">
-              <div className="flex justify-between items-center pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <div className="bg-primary/10 p-2 rounded-lg text-primary transition-colors group-hover:bg-primary group-hover:text-white">
-                    <Code2 className="w-4 h-4" />
+        {tunnels.map((tunnel, index) => {
+          const isWeb =
+            tunnel.protocol === "http" || tunnel.protocol === "https";
+          return (
+            <Card
+              key={tunnel.id}
+              className="group relative shadow-sm border-slate-200 hover:shadow-xl hover:border-primary/30 transition-all duration-300 animate-in fade-in slide-in-from-top-4"
+            >
+              <CardContent className="p-5 space-y-5">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-primary/10 p-2 rounded-lg text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+                      {isWeb ? (
+                        <Globe className="w-4 h-4" />
+                      ) : (
+                        <Code2 className="w-4 h-4" />
+                      )}
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-700">
+                      隧道配置 #{index + 1}
+                    </h3>
                   </div>
-                  <h3 className="text-sm font-bold text-slate-700">
-                    隧道配置 #{index + 1}
-                  </h3>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-slate-300 hover:text-destructive hover:bg-red-50 rounded-full"
+                    onClick={() => removeCard(tunnel.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-slate-300 hover:text-destructive hover:bg-red-50 rounded-full"
-                  onClick={() => removeCard(tunnel.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-              <div className="grid gap-4 text-sm">
-                <div className="flex items-center gap-4">
-                  <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
-                    隧道名称
-                  </Label>
-                  <div className="flex flex-1 items-center">
-                    <Input
-                      value={tunnel.name}
-                      onChange={(e) =>
-                        updateTunnel(tunnel.id, "name", e.target.value)
-                      }
-                      placeholder="自定义名"
-                      className="h-10 rounded-r-none border-r-0 focus-visible:ring-0 focus:bg-white transition-all"
-                    />
-                    <div className="h-10 px-3 flex items-center bg-slate-100 border border-l-0 border-slate-200 rounded-r-md text-slate-400 font-mono text-[11px] whitespace-nowrap select-none">
-                      _{tunnel.localPort || "0"}-{tunnel.remotePort || "0"}
+                <div className="grid gap-4 text-sm">
+                  <div className="flex items-center gap-4">
+                    <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
+                      隧道名称
+                    </Label>
+                    <div className="flex flex-1 items-center">
+                      <Input
+                        value={tunnel.name}
+                        onChange={(e) =>
+                          updateTunnel(tunnel.id, "name", e.target.value)
+                        }
+                        placeholder="service"
+                        className="h-10 rounded-r-none border-r-0 focus-visible:ring-0 focus:bg-white transition-all"
+                      />
+                      <div className="h-10 px-3 flex items-center bg-slate-100 border border-l-0 border-slate-200 rounded-r-md text-slate-400 font-mono text-[11px] whitespace-nowrap select-none">
+                        _{tunnel.localPort || "0"}-
+                        {isWeb ? tunnel.protocol : tunnel.remotePort || "0"}
+                      </div>
                     </div>
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="flex items-center gap-4">
+                      <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
+                        本地端口
+                      </Label>
+                      <Input
+                        value={tunnel.localPort}
+                        onChange={(e) =>
+                          updateTunnel(tunnel.id, "localPort", e.target.value)
+                        }
+                        placeholder="80"
+                        className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
+                      />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
+                        协议
+                      </Label>
+                      <Select
+                        value={tunnel.protocol}
+                        onValueChange={(v) =>
+                          updateTunnel(tunnel.id, "protocol", v)
+                        }
+                      >
+                        <SelectTrigger className="h-10 bg-slate-50/50 border-transparent focus:bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="tcp">TCP</SelectItem>
+                          <SelectItem value="udp">UDP</SelectItem>
+                          <SelectItem value="http">HTTP</SelectItem>
+                          <SelectItem value="https">HTTPS</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* 条件展示字段 */}
+                  {isWeb ? (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="flex items-center gap-4">
+                          <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
+                            自定义域名
+                          </Label>
+                          <Input
+                            value={tunnel.customDomains || ""}
+                            onChange={(e) =>
+                              updateTunnel(
+                                tunnel.id,
+                                "customDomains",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="example.com"
+                            className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
+                          />
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
+                            子域名
+                          </Label>
+                          <Input
+                            value={tunnel.subdomain || ""}
+                            onChange={(e) =>
+                              updateTunnel(
+                                tunnel.id,
+                                "subdomain",
+                                e.target.value,
+                              )
+                            }
+                            placeholder="sub"
+                            className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
+                          本地主机
+                        </Label>
+                        <Input
+                          value={tunnel.host}
+                          onChange={(e) =>
+                            updateTunnel(tunnel.id, "host", e.target.value)
+                          }
+                          className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary flex-1"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div className="flex items-center gap-4">
+                        <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
+                          远程端口
+                        </Label>
+                        <Input
+                          value={tunnel.remotePort}
+                          onChange={(e) =>
+                            updateTunnel(
+                              tunnel.id,
+                              "remotePort",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="20001"
+                          className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
+                        />
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
+                          主机
+                        </Label>
+                        <Input
+                          value={tunnel.host}
+                          onChange={(e) =>
+                            updateTunnel(tunnel.id, "host", e.target.value)
+                          }
+                          className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="flex items-center gap-4">
-                    <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
-                      本地端口
-                    </Label>
-                    <Input
-                      value={tunnel.localPort}
-                      onChange={(e) =>
-                        updateTunnel(tunnel.id, "localPort", e.target.value)
-                      }
-                      placeholder="80"
-                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
-                    />
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
-                      协议
-                    </Label>
-                    <Select
-                      value={tunnel.protocol}
-                      onValueChange={(v) =>
-                        updateTunnel(tunnel.id, "protocol", v)
-                      }
-                    >
-                      <SelectTrigger className="h-10 bg-slate-50/50 border-transparent focus:bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="tcp">TCP</SelectItem>
-                        <SelectItem value="udp">UDP</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                  <div className="flex items-center gap-4">
-                    <Label className="w-20 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
-                      远程端口
-                    </Label>
-                    <Input
-                      value={tunnel.remotePort}
-                      onChange={(e) =>
-                        updateTunnel(tunnel.id, "remotePort", e.target.value)
-                      }
-                      placeholder="20001"
-                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
-                    />
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <Label className="w-12 text-right shrink-0 text-slate-400 font-bold uppercase text-[11px]">
-                      主机
-                    </Label>
-                    <Input
-                      value={tunnel.host}
-                      onChange={(e) =>
-                        updateTunnel(tunnel.id, "host", e.target.value)
-                      }
-                      className="h-10 bg-slate-50/50 border-transparent focus:bg-white font-mono font-bold text-primary"
-                    />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {tunnels.length === 0 && (
